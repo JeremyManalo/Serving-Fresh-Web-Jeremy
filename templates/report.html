@@ -1,0 +1,465 @@
+{% extends "main.html" %}
+
+{% block content %}
+	<script src="ordermeal.js"></script>
+	<script>
+		function routeDetails() {
+			$.ajax( {
+				type: 'POST',
+				url:  '/api/v1/kitchen/routes',
+				success() {
+					alert( 'Routes have been created' );
+				}
+			} );
+		}
+
+		function sendReports() {
+			$.ajax( {
+				type: 'POST',
+				url:  '/api/v1/kitchen/reports',
+				success() {
+					alert( 'Reports have been emailed' );
+				}
+			} );
+		}
+
+		function refund( order_id, cost ) {
+			$.ajax( {
+				type: 'POST',
+				url:  `/api/v1/kitchen/refund/${order_id}`,
+				data: { cost },
+				success() {
+					alert( 'Refund code has been emailed' );
+				}
+			} );
+		}
+
+		function delivery( order_id ) {
+			const button = $( `#${order_id}_deliver` );
+
+			$.ajax( {
+				type: 'POST',
+				url:  `/api/v1/meals/deliver/${order_id}`,
+				data: { status: button.text() === 'Deliver' ? 'delivered' : 'open' },
+				success() {
+					button.html( button.text() === 'Deliver' ? 'Cancel' : 'Deliver' );
+				}
+			} );
+		}
+
+		function copy( order_id ) {
+			$.ajax( {
+				type: 'POST',
+				url:  `/api/v1/kitchen/copy/${order_id}`,
+				success() {
+					location.reload();
+				}
+			} );
+		}
+
+		function deleteOrder( order_id ) {
+			if ( confirm( 'Are you sure you want to delete?' ) ) {
+				$.ajax( {
+					type: 'POST',
+					url:  `/api/v1/meals/delete/${order_id}`,
+					success() {
+						$( `#${order_id}_delete` ).html( 'Deleted' );
+					}
+				} );
+			}
+		}
+
+		function deleteItem( order_id, index ) {
+			if ( confirm( 'Are you sure you want to delete?' ) ) {
+				$.ajax( {
+					type: 'POST',
+					url:  `/api/v1/meals/delete/${order_id}`,
+					data: { index },
+					success() {
+						$( `#${order_id}_delete_${index}` ).html( 'Deleted' );
+					}
+				} );
+			}
+		}
+	</script>
+	<link rel="stylesheet" type="text/css" href="{{ url_for('.static', filename='css/reportStyle.css' ) }}">
+
+	<main role="main" class="container-fluid">
+		<div class="row">
+			<div class="col-md-8">
+				<div class="border-bottom mb-4 ml-4 d-flex justify-content-between">
+					<!-- this is spacing below Join Today text -->
+					<span class="display-4 page-header-title">Open Orders</span>
+				</div>
+				{% if not openOrders %}
+					<p class="lead text-secondary ml-4">You currently have no orders placed.</p>
+				{% else %}
+					<div>
+						<a href="/api/v1/kitchen/orders" download="orders.csv">
+							<button class="btn btn-primary" type="submit">
+								Order Details
+							</button>
+						</a>
+						<a href="/api/v1/kitchen/customers" download="customers.csv">
+							<button class="btn btn-primary" type="submit">
+								Customer Details
+							</button>
+						</a>
+						<a href="/api/v1/kitchen/table" download="table.csv">
+							<button class="btn btn-primary" type="submit">
+								Pivot Table
+							</button>
+						</a>
+						<div class="float-right">
+							<button class="btn btn-primary" onclick="routeDetails()">
+								Route Details
+							</button>
+							<button class="btn btn-primary" data-toggle="modal" data-target="#couponModal">
+								Issue Coupon
+							</button>
+							<button class="btn btn-primary" onclick="sendReports()">
+								Send Reports
+							</button>
+						</div>
+					</div>
+					<div class="border-top ml-4 p-2 mb-1 mt-1">
+						<table class='table table-borderless mb-0'>
+							<thead>
+							<th class="time-col align-middle table-borderless" scope="col">Time</th>
+							<th class="name-col align-middle table-borderless" scope="col">Name</th>
+							<th class="email-col align-middle table-borderless" scope="col">Email</th>
+							<th class="address-col align-middle table-borderless" scope="col">Address</th>
+							<th class="phone-col align-middle table-borderless" scope="col">Phone</th>
+							<th class="number-col align-middle table-borderless" scope="col">Total ($)</th>
+							<th class="number-col align-middle table-borderless" scope="col">Items</th>
+							<th class="number-col align-middle table-borderless" scope="col">Payment Completed?</th>
+							<th class="orderbtn-col align-middle"></th>
+							</thead>
+						</table>
+					</div>
+				{% endif %}
+				{% for order in openOrders %}
+					{% set outer_loop = loop %}
+					{% if outer_loop.index == 1 %}
+						<div class="border-top border-bottom ml-4 p-2 mb-1 mt-1">
+					{% else %}
+						<div class="border-bottom ml-4 p-2 mb-1 mt-1">
+					{% endif %}
+
+				<table class='table table-borderless mb-0'>
+					<tbody>
+					<tr>
+						<td class="time-col align-middle table-borderless" scope="col">{{ order.order_time }}</td>
+						<th class="name-col align-middle table-borderless" scope="col">{{ order.name.S }}</th>
+						<td class="email-col align-middle table-borderless" scope="col">{{ order.email.S }}</td>
+						<td class="address-col align-middle table-borderless">
+							<div> {{ order.street.S }} </div>
+							<div> {{ order.city.S }}, {{ order.state.S }} {{ order.zipCode.N }} </div>
+						</td>
+						<td class="phone-col align-middle table-borderless">{{ order.phone.S }}</td>
+						<td class="number-col align-middle table-borderless">{{ order.totalAmount.N }}</td>
+						<td class="number-col align-middle table-borderless">{{ order.order_items.L|length }}</td>
+						<td class="number-col align-middle table-borderless">{{ order.paid.BOOL }}</td>
+						<td class="orderbtn-col align-middle">
+							<button class="btn btn-primary btn-sm reportbtn-gap" type=x"button" data-toggle="collapse"
+							        data-target="#openCollapse{{ loop.index }}" aria-expanded="false"
+							        aria-controls="collapseExample">
+								Orders
+							</button>
+							<button id="{{ order.order_id.S }}_deliver" class="btn btn-secondary btn-sm reportbtn-gap" type="button"
+							        onclick="delivery('{{ order.order_id.S }}')">Deliver</button>
+							<button class="btn btn-info btn-sm reportbtn-gap" type="button"
+							        onclick="copy('{{ order.order_id.S }}')">
+								Copy
+							</button>
+							<button id="{{ order.order_id.S }}_delete" class="btn btn-danger btn-sm reportbtn-gap" type="button"
+							        onclick="deleteOrder('{{ order.order_id.S }}')">Delete</button>
+						</td>
+					</tr>
+					</tbody>
+				</table>
+				<div class="order-details">
+					<div class="collapse" id="openCollapse{{ outer_loop.index }}">
+						{% for item in order.order_items.L %}
+							{% if item.name %}
+								<div class="border border-gray mb-2 mt-2 order-item-box">
+									<img src="{{ item.photo.S }}" class="card-img-top float-left" style="max-width:190px;
+									height:120px">
+									<span class="align-top list-inline-item float-left ml-2 w-50">
+                           <p class="item-title display-4"> {{ item.price }} {{ item.name }} </p>
+                           <p class="text-left"> Quantity: {{ item.qty }} </p>
+                           <p class="text-left"> Revenue: {{ item.revenue }} </p>
+                         </span>
+									<div class="form-group align-middle float-right m-1">
+										<button id="{{ order.order_id.S }}_delete_{{ loop.index0 }}" class="btn btn-danger btn-sm reportbtn-gap"
+										        onclick="deleteItem('{{ order.order_id.S }}', {{ loop.index0 }})">
+											Delete
+										</button>
+									</div>
+								</div>
+							{% else %}
+								{% if not item.photo %}
+									<div class="alert alert-danger mb-0" role="alert">
+										<p> Meal with id: <strong>{{ item.M.meal_id.S }}</strong> is no longer available or has
+											been removed. </p>
+									</div>
+								{% endif %}
+							{% endif %}
+						{% endfor %}
+					</div>
+				</div>
+				</div>
+				{% endfor %}
+				</div>
+
+				<div class="col-md-4 pr-4">
+					<div class="content-section pr-4">
+						<div class="border-bottom mb-4 d-flex justify-content-between">
+							<!-- this is spacing below Join Today text -->
+							<span class="display-4 page-header-title">Open Order Statistics</span>
+						</div>
+						<table class="table table-borderless">
+							<tbody>
+							<tr>
+								<th> Total Potential Revenue:</th>
+								<th class="text-center"> {{ totalPotentialRevenue }} </th>
+							</tr>
+							</tbody>
+							<tbody>
+							<tr class="table-active">
+								<th> Item</th>
+								<th class="text-center"> Item Quantities Needed</th>
+							</tr>
+							</tbody>
+							{% for meal in todaysMeals %}
+								<tbody>
+								<tr>
+									<td class="text-muted"> {{ meal.meal_name.S }} </td>
+									{% if totalPotentialQuantity[meal.meal_id.S] %}
+										<td class="text-center text-muted"> {{ totalPotentialQuantity[meal.meal_id.S] }} </td>
+									{% else %}
+										<td class="text-center text-muted"> 0</td>
+									{% endif %}
+								</tr>
+								</tbody>
+							{% endfor %}
+						</table>
+						{% if not todaysMeals %}
+							<h4 class="text-secondary">You currently have no produce available.</h4>
+						{% endif %}
+					</div>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-md-8">
+					<div class="border-bottom mb-4 ml-4 d-flex justify-content-between">
+						<!-- this is spacing below Join Today text -->
+						<span class="display-4 page-header-title">Delivered Orders</span>
+					</div>
+					{% if not deliveredOrders %}
+						<p class="lead text-secondary ml-4">You currently have no orders that have been delivered.</p>
+					{% else %}
+						<div>
+							<a href="/api/v1/kitchen/orders2" download="orders.csv">
+								<button class="btn btn-primary" type="submit">
+									Order Details
+								</button>
+							</a>
+							<a href="/api/v1/kitchen/customers2" download="customers.csv">
+								<button class="btn btn-primary" type="submit">
+									Customer Details
+								</button>
+							</a>
+							<a href="/api/v1/kitchen/table2" download="table.csv">
+								<button class="btn btn-primary" type="submit">
+									Pivot Table
+								</button>
+							</a>
+						</div>
+						<div class="border-top ml-4 p-2 mb-1 mt-1">
+							<table class='table table-borderless mb-0'>
+								<thead>
+								<th class="time-col align-middle table-borderless" scope="col">Time</th>
+								<th class="name-col align-middle table-borderless" scope="col">Name</th>
+								<th class="email-col align-middle table-borderless" scope="col">Email</th>
+								<th class="address-col align-middle table-borderless" scope="col">Address</th>
+								<th class="phone-col align-middle table-borderless" scope="col">Phone</th>
+								<th class="number-col align-middle table-borderless" scope="col">Total ($)</th>
+								<th class="number-col align-middle table-borderless" scope="col">Items</th>
+								<th class="number-col align-middle table-borderless" scope="col">Payment Completed?</th>
+								<th class="orderbtn-col align-middle"></th>
+								</thead>
+							</table>
+						</div>
+					{% endif %}
+					{% for order in deliveredOrders %}
+						{% set outer_loop = loop %}
+						{% if outer_loop.index == 1 %}
+							<div class="border-top border-bottom ml-4 p-2 mb-1 mt-1">
+						{% else %}
+							<div class="border-bottom ml-4 p-2 mb-1 mt-1">
+						{% endif %}
+					<table class='table table-borderless mb-0'>
+						<tbody>
+						<tr>
+							<td class="time-col align-middle table-borderless" scope="col">{{ order.order_time }}</td>
+							<th class="name-col align-middle table-borderless" scope="col">{{ order.name.S }}</th>
+							<td class="email-col align-middle table-borderless" scope="col">{{ order.email.S }}</td>
+							<td class="address-col align-middle table-borderless">
+								<div> {{ order.street.S }} </div>
+								<div> {{ order.city.S }}, {{ order.state.S }} {{ order.zipCode.N }} </div>
+							</td>
+							<td class="phone-col align-middle table-borderless">{{ order.phone.S }}</td>
+							<td class="number-col align-middle table-borderless">{{ order.totalAmount.N }}</td>
+							<td class="number-col align-middle table-borderless">{{ order.order_items.L|length }}</td>
+							<td class="number-col align-middle table-borderless">{{ order.paid.BOOL }}</td>
+							<td class="orderbtn-col align-middle">
+								<button class="btn btn-primary btn-sm reportbtn-gap" type=x"button" data-toggle="collapse"
+								        data-target="#deliveryCollapse{{ loop.index }}" aria-expanded="false"
+								        aria-controls="deliveryCollapse{{ loop.index }}">
+									Orders
+								</button>
+								<button id="{{ order.order_id.S }}_deliver" class="btn btn-secondary btn-sm reportbtn-gap" type="button"
+								        onclick="delivery('{{ order.order_id.S }}')">
+									Cancel
+								</button>
+								<button class="btn btn-info btn-sm reportbtn-gap" type="button"
+								        onclick="copy('{{ order.order_id.S }}')">
+									Copy
+								</button>
+								<button id="{{ order.order_id.S }}_0" class="btn btn-danger btn-sm reportbtn-gap" type="button"
+								        onclick="deleteOrder('{{ order.order_id.S }}')">
+									Delete
+								</button>
+							</td>
+						</tr>
+						</tbody>
+					</table>
+					<div class="order-details">
+						<div class="collapse" id="deliveryCollapse{{ outer_loop.index }}">
+							{% for item in order.order_items.L %}
+								{% if item.name %}
+									<div class="border border-gray mb-2 mt-2 order-item-box">
+										<img src="{{ item.photo.S }}" class="card-img-top float-left" style="max-width:190px;
+										height:120px">
+										<span class="align-top list-inline-item float-left ml-2">
+                           <p class="item-title display-4"> {{ item.price }} {{ item.name }} </p>
+                           <p class="text-left"> Quantity: {{ item.qty }} </p>
+                           <p class="text-left"> Revenue: {{ item.revenue }} </p>
+                         </span>
+										<!-- <div class="form-group align-middle float-right m-1">
+										  <textarea class="form-control notes-box" rows="7" id="order_notes"></textarea>
+										</div> -->
+									</div>
+								{% else %}
+									{% if not item.photo %}
+										<div class="alert alert-danger mb-0" role="alert">
+											<p> Meal with id: <strong>{{ item.M.meal_id.S }}</strong> is no longer available or has
+												been removed. </p>
+										</div>
+									{% endif %}
+								{% endif %}
+							{% endfor %}
+						</div>
+					</div>
+					</div>
+					{% endfor %}
+					</div>
+
+					<div class="col-md-4 pr-4">
+						<div class="content-section pr-4">
+							<div class="border-bottom mb-4 d-flex justify-content-between">
+								<!-- this is spacing below Join Today text -->
+								<span class="display-4 page-header-title">Delivered Order Statistics</span>
+							</div>
+							<table class="table table-borderless">
+								<tbody>
+								<tr>
+									<th> Total Revenue:</th>
+									<th class="text-center"> {{ totalDeliveredRevenue }} </th>
+								</tr>
+								</tbody>
+								<tbody>
+								<tr class="table-active">
+									<th> Item</th>
+									<th class="text-center"> Quantity Totals</th>
+								</tr>
+								</tbody>
+								{% for meal in todaysMeals %}
+									<tbody>
+									<tr>
+										<td class="text-muted"> {{ meal.meal_name.S }} </td>
+										{% if totalDeliveredQuantity[meal.meal_id.S] %}
+											<td class="text-center text-muted"> {{ totalDeliveredQuantity[meal.meal_id.S] }} </td>
+										{% else %}
+											<td class="text-center text-muted"> 0</td>
+										{% endif %}
+									</tr>
+									</tbody>
+								{% endfor %}
+							</table>
+							{% if not todaysMeals %}
+								<h4 class="text-secondary">You currently have no produce available.</h4>
+							{% endif %}
+						</div>
+					</div>
+				</div>
+
+				<div class="modal fade" id="couponModal" tabindex="-1" role="dialog" aria-labelledby="couponModalLabel"
+				     aria-hidden="true">
+					<div class="modal-dialog" role="document">
+						<div class="modal-content">
+							<div class="modal-header">
+								<h5 class="modal-title" id="couponModalLabel">Issue Coupon</h5>
+								<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+									<span aria-hidden="true">&times;</span>
+								</button>
+							</div>
+							<form action="https://phaqvwjbw6.execute-api.us-west-1.amazonaws.com/dev/api/v1/coupons" method="POST">
+								<div class="modal-body">
+									<div class="form-group">
+										<label for="credit">Credit</label>
+										<input type="text" class="form-control" name="credit">
+									</div>
+
+									<input type="hidden" name="active" value="true">
+
+									<div class="form-group">
+										<label for="days">Days</label>
+										<input type="text" class="form-control" name="days">
+									</div>
+
+									<div class="form-group">
+										<label for="lim">Limit</label>
+										<input type="text" class="form-control" name="lim">
+									</div>
+									<div class="form-group">
+										<label for="notes">Notes</label>
+										<input type="text" class="form-control" name="notes">
+									</div>
+
+									<input type="hidden" name="num_used" value="0">
+
+									<!-- <div class="form-check">
+										 <input type="checkbox" class="form-check-input" name="recurring">
+										 <label class="form-check-label" for="recurring">Recurring</label>
+									</div> -->
+									<div class="form-group">
+										<label for="email">Email</label>
+										<input type="email_id" class="form-control" name="email_id">
+									</div>
+									<div class="form-group">
+										<label for="coupon_type">Coupon Type</label>
+										<input type="text" class="form-control" name="coupon_type">
+									</div>
+								</div>
+								<div class="modal-footer">
+									<button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+									<button type="submit" class="btn btn-primary">Submit</button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+	</main>
+{% endblock %}
